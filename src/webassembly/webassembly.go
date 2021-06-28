@@ -20,7 +20,7 @@ const (
 
 var playerGuesses = [4]int{-1, -1, -1, -1}
 
-func render(this js.Value, inputs []js.Value) interface{} {
+func render() {
 	var canvas js.Value = js.
 		Global().
 		Get("document").
@@ -36,11 +36,11 @@ func render(this js.Value, inputs []js.Value) interface{} {
 	context.Call("beginPath")
 	context.Set("font", "48px serif")
 
-	for i := 0; i < len(playerGuesses); i++ {
-		if playerGuesses[i] == 0 {
+	for i, v := range playerGuesses {
+		if v == 0 {
 			context.Set("fillStyle", "blue")
 			context.Call("fillRect", 50+(200*i), 50, 50, 25)
-		} else if playerGuesses[i] == 1 {
+		} else if v == 1 {
 			context.Set("fillStyle", "red")
 			context.Call("fillRect", 100+(200*i), 50, 50, 25)
 		}
@@ -59,7 +59,14 @@ func render(this js.Value, inputs []js.Value) interface{} {
 	// 	context.Call("moveTo", getRandomNum()*width, getRandomNum()*height)
 	// 	context.Call("lineTo", getRandomNum()*width, getRandomNum()*height)
 	// }
-	return 1
+}
+
+func frameLoop() {
+	ticker := time.NewTicker(time.Millisecond * (1000 / 60))
+	defer ticker.Stop() // Not gonna happen, but good practice becasue thats the only way these get GC'd
+	for range ticker.C {
+		render()
+	}
 }
 
 func onClick(this js.Value, inputs []js.Value) interface{} {
@@ -91,10 +98,7 @@ func main() {
 		Get("document").
 		Set("onkeypress", js.FuncOf(keyPress))
 
-	js.
-		Global().
-		Call("setInterval", js.FuncOf(render), "20")
-
+	frameLoop()
 	initWebSocket()
 
 	<-done
