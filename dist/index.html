@@ -13,10 +13,11 @@
             margin: 0;
             text-align: center;
             background: #212529;
+            color: #d1d1d1;
         }
 
         h2 {
-            color: #d1d1d1
+            color: #d1d1d1;
         }
 
         * {
@@ -25,14 +26,69 @@
 
         canvas {
             margin: 0px auto;
-            display: block;
+            display: none;
             background: #ffffff;
+        }
+
+        #joinInfo {
+            display: grid;
+            grid-template-rows: auto auto auto;
+            gap: 16px;
+        }
+
+        #joinInputFields {
+            display: grid;
+            width: 500px;
+            grid-template-columns: auto 1fr;
+            grid-template-rows: auto auto;
+            gap: 16px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #buttonsWrapper {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button {
+            background-color: #009FBF;
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 25px;
+            font-size: 18px;
+        }
+
+        button:hover {
+            cursor: pointer;
+        }
+
+        #errorText {
+            color: red;
         }
     </style>
 </head>
 
 <body>
     <h2>=== Shyguy Says ===</h2>
+    <div id="joinInfo">
+        <div id="joinInputFields">
+            <label>Room Name</label>
+            <input type="text" id="roomName" />
+            <label>Password</label>
+            <input type="password" id="roomPassword" />
+        </div>
+
+        <div id="buttonsWrapper">
+            <button id="joinBtn">Join</button>
+            <button id="createRoomBtn">Create Room</button>
+        </div>
+        <div>
+            <span id="errorText"></span>
+        </div>
+    </div>
     <canvas title="click me" id='canvas'>Your browser does not support canvas</canvas>
 </body>
 <script src="js/app.js"></script>
