@@ -23,7 +23,15 @@ const (
 	keyW   = 119
 )
 
-var gameState = GameState{}
+var gameState = GameState{
+	InRoom:  false,
+	Players: make(map[string]*common.Player),
+	MyId:    "",
+	Room: common.RoomIdent{
+		Name:     "",
+		Password: "",
+	},
+}
 
 var sendQueue = make(chan interface{}) // broadcast channel
 
@@ -42,27 +50,23 @@ func render() {
 	context.Call("clearRect", 0, 0, width, height)
 
 	context.Call("beginPath")
-	context.Set("font", "48px serif")
+	context.Set("font", "16px serif")
 
-	for i, v := range gameState.Players {
+	for _, v := range gameState.Players {
+		fmt.Println(v)
+		context.Set("fillStyle", "black")
+		context.Call("fillText", v.DisplayName, 50+(200*v.PlayerNum), 20)
 		switch v.CurrentGuess {
 		case 0:
 			context.Set("fillStyle", "blue")
-			context.Call("fillRect", 50+(200*i), 50, 50, 25)
+			context.Call("fillRect", 50+(200*v.PlayerNum), 50, 50, 25)
 		case 1:
 			context.Set("fillStyle", "red")
-			context.Call("fillRect", 100+(200*i), 50, 50, 25)
+			context.Call("fillRect", 100+(200*v.PlayerNum), 50, 50, 25)
 		}
 	}
 
 	context.Call("stroke")
-
-	n := rand.Intn(1000)
-
-	if n < 150 && n > 100 {
-		n = rand.Intn(3)
-		gameState.Players[n+1].CurrentGuess = rand.Intn(2)
-	}
 
 	// for i := 0; i < 50; i++ {
 	// 	context.Call("moveTo", getRandomNum()*width, getRandomNum()*height)
@@ -79,13 +83,23 @@ func frameLoop() {
 }
 
 func joinRoom(this js.Value, inputs []js.Value) {
-	group := common.JoinRoomMessage{
+	displayName := getElementValueById("displayName").String()
+
+	if displayName == "" {
+		setElementConent("errorText", "Display Name cannot be empty!")
+		return
+	}
+
+	group := common.JoinRoomRequestPacket{
 		GenericMessage: common.GenericMessage{
-			Type: common.JoinRoom,
+			Type: common.JoinRoomRequest,
 		},
-		Data: common.RoomIdent{
-			Name:     getElementValueById("roomName").String(),
-			Password: getElementValueById("roomPassword").String(),
+		Data: common.JoinRoomRequestData{
+			Room: common.RoomIdent{
+				Name:     getElementValueById("roomName").String(),
+				Password: getElementValueById("roomPassword").String(),
+			},
+			DisplayName: displayName,
 		},
 	}
 
@@ -93,18 +107,28 @@ func joinRoom(this js.Value, inputs []js.Value) {
 }
 
 func createRoom(this js.Value, inputs []js.Value) {
+	displayName := getElementValueById("displayName").String()
+
+	if displayName == "" {
+		setElementConent("errorText", "Display Name cannot be empty!")
+		return
+	}
+
 	roomName := strings.TrimSpace(getElementValueById("roomName").String())
 	if len(roomName) == 0 {
 		setElementConent("errorText", "Room name cannot be empty!")
 		return
 	}
-	group := common.JoinRoomMessage{
+	group := common.JoinRoomRequestPacket{
 		GenericMessage: common.GenericMessage{
-			Type: common.CreateRoom,
+			Type: common.CreateRoomRequest,
 		},
-		Data: common.RoomIdent{
-			Name:     roomName,
-			Password: getElementValueById("roomPassword").String(),
+		Data: common.JoinRoomRequestData{
+			Room: common.RoomIdent{
+				Name:     roomName,
+				Password: getElementValueById("roomPassword").String(),
+			},
+			DisplayName: displayName,
 		},
 	}
 
@@ -125,11 +149,16 @@ func keyPress(this js.Value, inputs []js.Value) interface{} {
 }
 
 func setCurrentGuess(guess int) {
-	for _, p := range gameState.Players {
-		if p.Id == gameState.MyId {
-			p.CurrentGuess = guess
-		}
+	packet := common.UserInputPacket{
+		GenericMessage: common.GenericMessage{
+			Type: common.UserInput,
+		},
+		Data: common.UserInputData{
+			PlayerId: gameState.MyId,
+			Input:    guess,
+		},
 	}
+	sendQueue <- packet
 }
 
 func main() {
@@ -205,9 +234,8 @@ func readMessages(server *websocket.Conn, hold *sync.WaitGroup) {
 		}
 
 		switch message.Type {
-		case common.JoinRoomResult:
-		case common.CreateRoomResult:
-			var result common.JoinRoomResultMessage
+		case common.JoinRoomResponse:
+			var result common.JoinRoomResponsePacket
 			if err := json.Unmarshal(bytes, &result); err != nil {
 				fmt.Println("error:", err)
 			}
@@ -216,11 +244,67 @@ func readMessages(server *websocket.Conn, hold *sync.WaitGroup) {
 				setElementConent("errorText", result.Data.Message)
 				continue
 			}
-			gameState.Players[gameState.MyId] = Player{
-				Id:           gameState.MyId,
-				CurrentGuess: -1,
+			gameState.MyId = result.Data.MyId
+			gameState.Room = result.Data.Room
+
+			for _, p := range result.Data.Players {
+				_, exists := gameState.Players[p.Id]
+				if !exists {
+					gameState.Players[p.Id] = &common.Player{
+						Id:           p.Id,
+						CurrentGuess: p.CurrentGuess,
+						PlayerNum:    p.PlayerNum,
+						DisplayName:  p.DisplayName,
+					}
+				}
 			}
 			initGame()
+		case common.CreateRoomResponse:
+			var result common.JoinRoomResponsePacket
+			if err := json.Unmarshal(bytes, &result); err != nil {
+				fmt.Println("error:", err)
+			}
+
+			if !result.Data.Valid {
+				setElementConent("errorText", result.Data.Message)
+				continue
+			}
+			gameState.MyId = result.Data.MyId
+			gameState.Room = result.Data.Room
+
+			for _, p := range result.Data.Players {
+				gameState.Players[p.Id] = &common.Player{
+					Id:           p.Id,
+					CurrentGuess: p.CurrentGuess,
+					PlayerNum:    p.PlayerNum,
+					DisplayName:  p.DisplayName,
+				}
+			}
+
+			initGame()
+		case common.UserJoin:
+			var result common.UserJoinRoomPacket
+			if err := json.Unmarshal(bytes, &result); err != nil {
+				fmt.Println("error:", err)
+			}
+			gameState.Players[result.Data.Player.Id] = &result.Data.Player
+		case common.UserInput:
+			var result common.UserInputPacket
+			if err := json.Unmarshal(bytes, &result); err != nil {
+				fmt.Println("error:", err)
+			}
+			for id, p := range gameState.Players {
+				if id == result.Data.PlayerId {
+					p.CurrentGuess = result.Data.Input
+				}
+			}
+		case common.UserLeave:
+			var result common.UserInputPacket
+			if err := json.Unmarshal(bytes, &result); err != nil {
+				fmt.Println("error:", err)
+			}
+
+			delete(gameState.Players, result.Data.PlayerId)
 		}
 	}
 }
