@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"syscall/js"
@@ -21,4 +21,21 @@ func getElementValueById(id string) js.Value {
 
 func setElementConent(id string, content string) {
 	getElementById(id).Set("innerHTML", content)
+}
+
+func clearErrorMsg() {
+	setElementConent("errorText", "")
+}
+
+func (c *Client) initJSBindings() {
+	bindEventListener("canvas", c.onClick)
+
+	js.
+		Global().
+		Get("document").
+		Set("onkeypress", js.FuncOf(c.keyPress))
+
+	bindEventListener("joinBtn", c.joinRoom)
+	bindEventListener("createRoomBtn", c.createRoom)
+	bindEventListener("startGameBtn", c.startgame)
 }
