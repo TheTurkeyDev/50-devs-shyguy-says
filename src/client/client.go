@@ -27,22 +27,30 @@ var sendQueue = make(chan interface{}) // broadcast channel
 
 type Client struct {
 	InRoom        bool
+	InProgress    bool
 	Players       map[string]*common.Player
 	MyId          string
 	Room          common.RoomIdent
 	ShyGuyDisplay int
+	Round         int
+	RoundStatus   int
+	TitleMessages []*common.TitleMessageData
 }
 
 func NewInstance() *Client {
 	client := &Client{
-		InRoom:  false,
-		Players: make(map[string]*common.Player),
-		MyId:    "",
+		InRoom:     false,
+		InProgress: false,
+		Players:    make(map[string]*common.Player),
+		MyId:       "",
 		Room: common.RoomIdent{
 			Name:     "",
 			Password: "",
 		},
 		ShyGuyDisplay: -1,
+		Round:         0,
+		RoundStatus:   -1,
+		TitleMessages: []*common.TitleMessageData{},
 	}
 
 	client.run()
@@ -59,6 +67,7 @@ func (c *Client) run() {
 	c.initJSBindings()
 
 	go c.frameLoop()
+	go c.tickLoop()
 	c.initWebSocket()
 
 	<-done
@@ -97,6 +106,12 @@ func (c *Client) sendMessages(server *websocket.Conn, hold *sync.WaitGroup) {
 			server.Close(websocket.StatusInternalError, err.Error())
 			return
 		}
+	}
+}
+
+func (c *Client) tick() {
+	for _, tm := range c.TitleMessages {
+		tm.DisplayTime -= 1
 	}
 }
 
@@ -141,6 +156,35 @@ func (c *Client) render() {
 		context.Call("fillRect", 550, 500, 50, 25)
 	}
 
+	if c.InProgress {
+		context.Set("fillStyle", "black")
+		context.Call("fillText", fmt.Sprintf("Round: %d", c.Round), 50, 550)
+		context.Call("fillText", fmt.Sprintf("Round Status: %d", c.RoundStatus), 50, 575)
+	}
+
+	context.Set("textAlign", "center")
+	context.Set("textBaseline", "middle")
+	for i := len(c.TitleMessages) - 1; i >= 0; i-- {
+		tm := c.TitleMessages[i]
+		if tm.DisplayTime == 0 {
+			c.TitleMessages = append(c.TitleMessages[:i], c.TitleMessages[i+1:]...)
+		} else {
+			context.Set("fillStyle", tm.Color)
+			switch tm.Location {
+			case 0:
+				context.Set("font", "128px serif")
+				context.Call("fillText", tm.Value, width/2, height/2)
+			case 1:
+				context.Set("font", "96px serif")
+				context.Call("fillText", tm.Value, width/2, (height/2)+75)
+			}
+		}
+	}
+
+	context.Set("font", "16px serif")
+	context.Set("textAlign", "start")
+	context.Set("textAlign", "top")
+
 	context.Call("stroke")
 
 	// for i := 0; i < 50; i++ {
@@ -149,9 +193,17 @@ func (c *Client) render() {
 	// }
 }
 
+func (c *Client) tickLoop() {
+	ticker := time.NewTicker(time.Millisecond * (1000 / 20)) // 20 tps
+	defer ticker.Stop()                                      // Not gonna happen, but good practice becasue thats the only way these get GC'd
+	for range ticker.C {
+		c.tick()
+	}
+}
+
 func (c *Client) frameLoop() {
-	ticker := time.NewTicker(time.Millisecond * (1000 / 60))
-	defer ticker.Stop() // Not gonna happen, but good practice becasue thats the only way these get GC'd
+	ticker := time.NewTicker(time.Millisecond * (1000 / 60)) // 30 fps
+	defer ticker.Stop()                                      // Not gonna happen, but good practice becasue thats the only way these get GC'd
 	for range ticker.C {
 		c.render()
 	}
@@ -189,10 +241,16 @@ func (c *Client) readMessages(server *websocket.Conn, hold *sync.WaitGroup) {
 		case *common.StartGameResponsePacket:
 			c.HandleStartGameResponsePacket(real)
 		case *common.GameOverPacket:
+			c.InProgress = false
 			clearErrorMsg()
 			getElementById("gameInputFields").Get("style").Set("display", "block")
 		case *common.ShyGuyDisplayPacket:
 			c.ShyGuyDisplay = real.Data.Input
+		case *common.RoundUpdatePacket:
+			c.Round = real.Data.Round
+			c.RoundStatus = real.Data.RoundStatus
+		case *common.TitleMessagePacket:
+			c.TitleMessages = append(c.TitleMessages, &real.Data)
 		}
 	}
 }
@@ -223,6 +281,10 @@ func getMessage(bytes []byte) interface{} {
 		target = &common.GameOverPacket{}
 	case common.ShyGuyDsiplay:
 		target = &common.ShyGuyDisplayPacket{}
+	case common.RoundUpdate:
+		target = &common.RoundUpdatePacket{}
+	case common.TitleMessage:
+		target = &common.TitleMessagePacket{}
 	}
 
 	if err := json.Unmarshal(bytes, &target); err != nil {

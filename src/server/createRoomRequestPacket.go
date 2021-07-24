@@ -57,9 +57,9 @@ func (s *Server) HandleCreateRoomRequestPacket(joinMsg common.JoinRoomRequestPac
 	}
 
 	room := Room{
-		roomName: roomName,
-		password: joinMsg.Data.Room.Password,
-		clients: []*Client{{
+		RoomName: roomName,
+		Password: joinMsg.Data.Room.Password,
+		Clients: []*Client{{
 			con: ws,
 			player: common.Player{
 				Id:           result.Data.MyId,

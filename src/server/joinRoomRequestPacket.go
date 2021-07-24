@@ -22,7 +22,7 @@ func (s *Server) HandleJoinRoomRequestPacket(joinMsg common.JoinRoomRequestPacke
 
 	if room, exists := s.rooms[joinMsg.Data.Room.Name]; exists {
 
-		if room.ticking {
+		if room.Ticking {
 			result.Data.Valid = false
 			result.Data.Message = "You cannot join a room currently in progress!"
 			return result
@@ -32,7 +32,7 @@ func (s *Server) HandleJoinRoomRequestPacket(joinMsg common.JoinRoomRequestPacke
 		contained := true
 		for contained {
 			contained = false
-			for _, c := range room.clients {
+			for _, c := range room.Clients {
 				if c.player.PlayerNum == nextPos {
 					nextPos += 1
 					contained = true
@@ -48,20 +48,20 @@ func (s *Server) HandleJoinRoomRequestPacket(joinMsg common.JoinRoomRequestPacke
 			DisplayName:  joinMsg.Data.DisplayName,
 		}
 
-		if joinMsg.Data.Room.Password != room.password {
+		if joinMsg.Data.Room.Password != room.Password {
 			result.Data.Valid = false
 			result.Data.Message = "Password incorrect!"
 			return result
 		}
 
 		result.Data.MyId = joinedPlayer.Id
-		room.clients = append(room.clients, &Client{
+		room.Clients = append(room.Clients, &Client{
 			con:    ws,
 			player: joinedPlayer,
 		})
-		s.clients[ws] = room.roomName
+		s.clients[ws] = room.RoomName
 
-		for _, c := range room.clients {
+		for _, c := range room.Clients {
 			result.Data.Players = append(result.Data.Players, c.player)
 			joinedMsg := common.UserJoinRoomPacket{
 				GenericMessage: common.GenericMessage{

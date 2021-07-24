@@ -12,6 +12,8 @@ const (
 	StartGameResponse
 	GameOver
 	ShyGuyDsiplay
+	RoundUpdate
+	TitleMessage
 )
 
 type RoomIdent struct {
@@ -111,4 +113,26 @@ type GameOverData struct {
 type GameOverPacket struct {
 	GenericMessage
 	Data GameOverData
+}
+
+type RoundUpdateData struct {
+	Round       int
+	RoundStatus int
+}
+
+type RoundUpdatePacket struct {
+	GenericMessage
+	Data RoundUpdateData
+}
+
+type TitleMessageData struct {
+	Value       string
+	Color       string
+	Location    int
+	DisplayTime int
+}
+
+type TitleMessagePacket struct {
+	GenericMessage
+	Data TitleMessageData
 }

@@ -8,6 +8,8 @@ func (c *Client) HandleStartGameResponsePacket(packet *common.StartGameResponseP
 		return
 	}
 
+	c.InProgress = true
+
 	clearErrorMsg()
 	getElementById("gameInputFields").Get("style").Set("display", "none")
 }

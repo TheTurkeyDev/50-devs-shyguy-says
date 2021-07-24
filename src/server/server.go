@@ -103,8 +103,12 @@ func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 
 			roomName := s.clients[ws]
+			room := s.rooms[roomName]
+			client := s.getClientForWS(ws, roomName)
 
-			s.rooms[roomName].sendMessageToAll(result)
+			if room.onUserInputChange(client, result.Data.Input) {
+				room.sendMessageToAll(result)
+			}
 			// c.player.CurrentGuess = result.Data.Input
 		case common.StartGame:
 			var packet common.StartGamePacket
@@ -131,7 +135,7 @@ func (s *Server) onDisconnect(ws *websocket.Conn) {
 
 	room.onClientLeave(leavingClient)
 
-	if len(room.clients) == 0 {
+	if len(room.Clients) == 0 {
 		room.stopGame()
 		delete(s.rooms, roomName)
 		return
@@ -158,7 +162,7 @@ func (s *Server) sendMessage(client *websocket.Conn, msg interface{}) {
 }
 
 func (s *Server) getClientForWS(ws *websocket.Conn, roomName string) *Client {
-	for _, c := range s.rooms[roomName].clients {
+	for _, c := range s.rooms[roomName].Clients {
 		if c.con == ws {
 			return c
 		}
