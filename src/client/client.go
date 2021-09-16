@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"shyguy-says/src/common"
 	"strings"
@@ -17,37 +18,45 @@ import (
 )
 
 const (
-	width  = 800
-	height = 600
-	keyQ   = 113
-	keyW   = 119
+	width        = 800
+	height       = 600
+	keyQ         = 113
+	keyW         = 119
+	armAnimSpeed = 7
 )
 
 var sendQueue = make(chan interface{}) // broadcast channel
 
 type Client struct {
-	InRoom        bool
-	InProgress    bool
-	Players       map[string]*common.Player
-	MyId          string
-	Room          common.RoomIdent
-	ShyGuyDisplay int
-	Round         int
-	RoundStatus   int
-	TitleMessages []*common.TitleMessageData
+	InRoom            bool
+	InProgress        bool
+	Players           map[string]*common.Player
+	PlayersAnimAngles map[string]*PlayerAnimData
+	MyId              string
+	Room              common.RoomIdent
+	ShyGuyDisplay     int
+	ShyGuyAngles      *PlayerAnimData
+	Round             int
+	RoundStatus       int
+	TitleMessages     []*common.TitleMessageData
 }
 
 func NewInstance() *Client {
 	client := &Client{
-		InRoom:     false,
-		InProgress: false,
-		Players:    make(map[string]*common.Player),
-		MyId:       "",
+		InRoom:            false,
+		InProgress:        false,
+		Players:           make(map[string]*common.Player),
+		PlayersAnimAngles: make(map[string]*PlayerAnimData),
+		MyId:              "",
 		Room: common.RoomIdent{
 			Name:     "",
 			Password: "",
 		},
 		ShyGuyDisplay: -1,
+		ShyGuyAngles: &PlayerAnimData{
+			RedAngle:  0,
+			BlueAngle: 0,
+		},
 		Round:         0,
 		RoundStatus:   -1,
 		TitleMessages: []*common.TitleMessageData{},
@@ -79,7 +88,7 @@ func (c *Client) initWebSocket() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	ws, _, err := websocket.Dial(ctx, "http://localhost:8000/ws", nil)
+	ws, _, err := websocket.Dial(ctx, "https://test.theturkey.dev/ws", nil)
 	if err != nil {
 		print("Error 1!")
 		return
@@ -113,6 +122,26 @@ func (c *Client) tick() {
 	for _, tm := range c.TitleMessages {
 		tm.DisplayTime -= 1
 	}
+
+	for id, p := range c.Players {
+		angles := c.PlayersAnimAngles[id]
+		updateAngles(p.CurrentGuess, angles)
+	}
+	updateAngles(c.ShyGuyDisplay, c.ShyGuyAngles)
+}
+
+func updateAngles(currentGuess int, angles *PlayerAnimData) {
+	if currentGuess == 0 && angles.BlueAngle < 85 {
+		angles.BlueAngle += armAnimSpeed
+	} else if currentGuess != 0 && angles.BlueAngle > 0 {
+		angles.BlueAngle -= armAnimSpeed
+	}
+
+	if currentGuess == 1 && angles.RedAngle < 85 {
+		angles.RedAngle += armAnimSpeed
+	} else if currentGuess != 1 && angles.RedAngle > 0 {
+		angles.RedAngle -= armAnimSpeed
+	}
 }
 
 func (c *Client) render() {
@@ -130,31 +159,65 @@ func (c *Client) render() {
 	context.Call("clearRect", 0, 0, width, height)
 
 	context.Call("beginPath")
-	context.Set("font", "16px serif")
+	context.Set("textAlign", "center")
+	context.Set("font", "24px serif")
 
 	for _, v := range c.Players {
 		context.Set("fillStyle", "black")
-		context.Call("fillText", v.DisplayName, 50+(200*v.PlayerNum), 20)
-		switch v.CurrentGuess {
-		case 0:
-			context.Set("fillStyle", "blue")
-			context.Call("fillRect", 50+(200*v.PlayerNum), 50, 50, 25)
-		case 1:
-			context.Set("fillStyle", "red")
-			context.Call("fillRect", 100+(200*v.PlayerNum), 50, 50, 25)
-		}
+		context.Call("fillText", v.DisplayName, 103+(200*v.PlayerNum), 30)
+		context.Call("drawImage", getElementById("penguin_body"), 70+(200*v.PlayerNum), 40, 75, 129)
+
+		prX := 127 + (200 * v.PlayerNum)
+		pbX := 18 + (200 * v.PlayerNum)
+		pY := 92
+		pW := 69
+		hY := 61
+		offset := 5
+
+		angles := c.PlayersAnimAngles[v.Id]
+
+		// Red flag flipper
+		context.Call("save")
+		context.Call("translate", prX+offset, pY)
+		context.Call("rotate", -(angles.RedAngle)*math.Pi/180)
+		context.Call("translate", -(prX + offset), -pY)
+		context.Call("drawImage", getElementById("penguin_flipper_red_flag"), prX, pY, pW, hY)
+		context.Call("restore")
+
+		// Blue flag flipper
+		context.Call("save")
+		context.Call("translate", pbX+(pW-offset), pY)
+		context.Call("rotate", (angles.BlueAngle)*math.Pi/180)
+		context.Call("translate", -pbX-(pW-offset), -pY)
+		context.Call("drawImage", getElementById("penguin_flipper_blue_flag"), pbX, pY, pW, hY)
+		context.Call("restore")
 	}
 
 	context.Set("fillStyle", "black")
-	context.Call("fillText", "ShyGuy", 500, 500)
-	switch c.ShyGuyDisplay {
-	case 0:
-		context.Set("fillStyle", "blue")
-		context.Call("fillRect", 500, 500, 50, 25)
-	case 1:
-		context.Set("fillStyle", "red")
-		context.Call("fillRect", 550, 500, 50, 25)
-	}
+	context.Call("fillText", "Pengu", 400, 590)
+	context.Call("drawImage", getElementById("penguin_behind"), 335, 300)
+
+	prX := 450
+	pbX := 250
+	pY := 400
+	pW := 118
+	hY := 122
+	offset := 5
+	// Red flag flipper
+	context.Call("save")
+	context.Call("translate", prX+offset, pY)
+	context.Call("rotate", -(c.ShyGuyAngles.RedAngle)*math.Pi/180)
+	context.Call("translate", -(prX + offset), -pY)
+	context.Call("drawImage", getElementById("penguin_flipper_red_flag"), prX, pY, pW, hY)
+	context.Call("restore")
+
+	// Blue flag flipper
+	context.Call("save")
+	context.Call("translate", pbX+(pW-offset), pY)
+	context.Call("rotate", (c.ShyGuyAngles.BlueAngle)*math.Pi/180)
+	context.Call("translate", -pbX-(pW-offset), -pY)
+	context.Call("drawImage", getElementById("penguin_flipper_blue_flag"), pbX, pY, pW, hY)
+	context.Call("restore")
 
 	if c.InProgress {
 		context.Set("fillStyle", "black")
@@ -229,6 +292,10 @@ func (c *Client) readMessages(server *websocket.Conn, hold *sync.WaitGroup) {
 				c.HandleCreateRoomResponsePacket(real)
 			}
 		case *common.UserJoinRoomPacket:
+			c.PlayersAnimAngles[real.Data.Player.Id] = &PlayerAnimData{
+				BlueAngle: 0,
+				RedAngle:  0,
+			}
 			c.Players[real.Data.Player.Id] = &real.Data.Player
 		case *common.UserInputPacket:
 			for id, p := range c.Players {
@@ -238,6 +305,7 @@ func (c *Client) readMessages(server *websocket.Conn, hold *sync.WaitGroup) {
 			}
 		case *common.UserLeaveRoomPacket:
 			delete(c.Players, real.Data.PlayerId)
+			delete(c.PlayersAnimAngles, real.Data.PlayerId)
 		case *common.StartGameResponsePacket:
 			c.HandleStartGameResponsePacket(real)
 		case *common.GameOverPacket:

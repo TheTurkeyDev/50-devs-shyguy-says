@@ -37,9 +37,9 @@ func (s *Server) run() {
 	// Configure websocket route
 	http.HandleFunc("/ws", s.handleConnections)
 
-	// Start the server on localhost port 8000 and log any errors
-	log.Println("http server started on :8000")
-	err := http.ListenAndServe(":8000", nil)
+	// Start the server on localhost port 8010 and log any errors
+	log.Println("http server started on :8010")
+	err := http.ListenAndServe(":8010", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
@@ -47,7 +47,9 @@ func (s *Server) run() {
 
 func (s *Server) handleConnections(w http.ResponseWriter, r *http.Request) {
 	// Upgrade initial GET request to a websocket
-	ws, err := websocket.Accept(w, r, nil)
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"test.theturkey.dev"},
+	})
 	if err != nil {
 		log.Fatal(err)
 		return

@@ -19,6 +19,10 @@ func (c *Client) HandleJoinRoomResponsePacket(packet *common.JoinRoomResponsePac
 				PlayerNum:    p.PlayerNum,
 				DisplayName:  p.DisplayName,
 			}
+			c.PlayersAnimAngles[p.Id] = &PlayerAnimData{
+				RedAngle:  0,
+				BlueAngle: 0,
+			}
 		}
 	}
 	c.initGame()
